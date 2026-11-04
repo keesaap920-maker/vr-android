@@ -86,3 +86,6 @@ No user environment video recording, network camera upload or root access is imp
 ## Open-source code
 
 The original project code in this package is provided under the MIT license (see `LICENSE`). Third-party dependencies retain their own licenses.
+
+
+GitHub Actions: build the prototype using `.github/workflows/android.yml` (Android APK workflow).
