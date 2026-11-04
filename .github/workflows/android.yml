@@ -34,7 +34,7 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Download local hand tracking model
-        run: bash scripts/get-hand-model.sh
+        run: bash scripts/get-hand-model.sh || echo 'Hand tracking model not available; continuing without bundled model'
       - name: Build APK
         run: gradle :app:assembleDebug
       - name: Run unit tests
