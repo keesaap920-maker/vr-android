@@ -47,7 +47,7 @@ class LauncherActivity : Activity() {
         layout.addView(label(
             "Testversie voor de uitgeklapte Galaxy Z Flip5. " +
             "Dit startscherm is gewoon 2D en moet altijd zichtbaar zijn. " +
-            "Na 'Start VR' verschijnen twee beelden naast elkaar.",
+            "Kies 'Test zonder VR-bril' voor één normaal beeld, of stereo voor een headset.",
             15f, Color.rgb(189,207,231)
         ))
 
@@ -61,8 +61,13 @@ class LauncherActivity : Activity() {
                 ViewGroup.LayoutParams.MATCH_PARENT, dp(58)
             ).apply { topMargin = dp(12) })
         }
-        action("Start VR") {
-            startActivity(Intent(this, VisionActivity::class.java))
+        action("Test zonder VR-bril (één beeld)") {
+            startActivity(Intent(this, VisionActivity::class.java)
+                .putExtra("mono_preview", true))
+        }
+        action("Start VR in stereomodus") {
+            startActivity(Intent(this, VisionActivity::class.java)
+                .putExtra("mono_preview", false))
         }
         action("Herstel VR-instellingen") {
             getSharedPreferences("visionos_settings", MODE_PRIVATE)
@@ -100,7 +105,7 @@ class LauncherActivity : Activity() {
 
             $extra
 
-            Zie je na Start VR zwart of niets? Druk op Terug om naar
+            Zie je na het starten zwart of niets? Druk op Terug om naar
             dit testscherm terug te keren. Maak een screenshot.
         """.trimIndent()
     }
