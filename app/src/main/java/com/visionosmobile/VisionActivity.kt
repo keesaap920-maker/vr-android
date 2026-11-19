@@ -18,6 +18,9 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.FrameLayout
+import android.widget.TextView
+import android.view.Gravity
+import android.graphics.Color
 import android.widget.Toast
 import com.visionosmobile.browser.BrowserBridge
 import com.visionosmobile.tracking.HeadTracker
@@ -87,14 +90,42 @@ class VisionActivity:Activity() {
             override fun playVideo(command:String){if(ready)stereo.queueEvent {renderer.videoCommand(command)}}
             override fun exitVR()=runOnUiThread {finish()}
         })
-        renderer=StereoRenderer(this,workspace,head,hand,browser)
+        val monoPreview=intent.getBooleanExtra("mono_preview",false)
+        renderer=StereoRenderer(this,workspace,head,hand,browser,monoPreview)
         stereo=StereoSurfaceView(this,renderer)
         val root=FrameLayout(this)
         // Keep WebView attached and painted by Chromium underneath the GLSurfaceView.
         // GLSurfaceView itself remains the visible headset output.
         root.addView(browser.webView,FrameLayout.LayoutParams(900,560))
         root.addView(stereo,FrameLayout.LayoutParams(-1,-1))
+        // Android overlay, not OpenGL: survives a failed GL frame and explains black screens.
+        val loading=TextView(this).apply {
+            text="VisionOS Mobile start...  ·  Tik op Terug voor het testmenu"
+            setTextColor(Color.WHITE)
+            setBackgroundColor(Color.argb(220, 9, 24, 48))
+            textSize=15f
+            setPadding(24,16,24,16)
+            setOnClickListener { finish() }
+        }
+        root.addView(loading, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            Gravity.TOP or Gravity.CENTER_HORIZONTAL
+        ))
         setContentView(root)
+        ui.postDelayed({
+            if(!isFinishing && !isDestroyed) {
+                if(renderer.lastRender==0L) {
+                    loading.text="Geen 3D-beeld getekend. Tik hier om terug te keren."
+                    loading.setBackgroundColor(Color.argb(240, 120, 34, 29))
+                } else {
+                    loading.text=if(monoPreview)
+                        "2D-testbeeld actief. Volume+ = selecteer; Volume- = centreer."
+                    else "VR-beeld actief. Volume+ = selecteer; Volume- = centreer."
+                    ui.postDelayed({if(!isFinishing) root.removeView(loading)},4000)
+                }
+            }
+        },4500)
         ready=true
         ui.postDelayed({ workspace.refreshApplications() },900)
         if(!getSharedPreferences("visionos_settings",MODE_PRIVATE).getBoolean("intro_seen",false))showIntro()
