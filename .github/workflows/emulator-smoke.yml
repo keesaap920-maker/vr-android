@@ -1,0 +1,74 @@
+name: Test VisionOS Mobile in Android emulator
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/emulator-smoke.yml
+
+permissions:
+  contents: read
+
+jobs:
+  emulator-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android command line tools
+        run: |
+          mkdir -p "$HOME/android-sdk/cmdline-tools"
+          curl -fL --retry 3 "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip" -o /tmp/android-cmdline.zip
+          unzip -q /tmp/android-cmdline.zip -d "$HOME/android-sdk/cmdline-tools"
+          mv "$HOME/android-sdk/cmdline-tools/cmdline-tools" "$HOME/android-sdk/cmdline-tools/latest"
+          echo "ANDROID_HOME=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$HOME/android-sdk" >> "$GITHUB_ENV"
+          echo "$HOME/android-sdk/cmdline-tools/latest/bin" >> "$GITHUB_PATH"
+          echo "$HOME/android-sdk/platform-tools" >> "$GITHUB_PATH"
+      - name: Android licenses and packages
+        run: |
+          yes | sdkmanager --sdk_root="$ANDROID_HOME" --licenses > /dev/null
+          sdkmanager --sdk_root="$ANDROID_HOME" 'platforms;android-35' 'build-tools;34.0.0' 'platform-tools' 'emulator' 'system-images;android-35;google_apis;x86_64'
+      - name: Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Download optional hand model
+        run: bash scripts/get-hand-model.sh || true
+      - name: Build and unit-test app
+        run: gradle :app:assembleDebug :app:testDebugUnitTest
+      - name: Emulator smoke test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_5
+          avd-name: visionos-test
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          script: |
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell am start -n com.visionosmobile/.VisionActivity
+            sleep 12
+            adb logcat -d -b crash > emulator-crashes.txt
+            adb exec-out screencap -p > emulator-screen.png
+            adb shell pidof com.visionosmobile
+            if grep -E 'FATAL EXCEPTION|com.visionosmobile' emulator-crashes.txt; then
+              echo "Android app crash recorded"
+              exit 1
+            fi
+      - name: Upload emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-smoke-evidence
+          path: |
+            emulator-screen.png
+            emulator-crashes.txt
+          if-no-files-found: warn
