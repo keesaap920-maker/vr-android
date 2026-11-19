@@ -30,7 +30,8 @@ class StereoRenderer(
     private val workspace:Workspace,
     private val head:HeadTracker,
     private val hand:MediaPipeHandTracker,
-    private val browser:BrowserBridge
+    private val browser:BrowserBridge,
+    private val monoPreview:Boolean = false
 ):GLSurfaceView.Renderer {
     private var width=1;private var height=1
     private var quadProgram=0;private var distortionProgram=0;private var lineProgram=0
@@ -49,7 +50,8 @@ class StereoRenderer(
     private var oldBrowserRevision=-1
     private var cachedWeb:Bitmap?=null
     @Volatile private var gallery:Bitmap?=null
-    private var lastRender=0L
+    @Volatile var lastRender=0L
+        private set
     private var frameCount=0
     private var lastFpsMark=SystemClock.uptimeMillis()
     @Volatile private var surfaceReady=false
@@ -114,10 +116,10 @@ class StereoRenderer(
             }
         }
         val scale=workspace.renderScale
-        val expectedW=maxOf(256,(width/2*scale).toInt())
+        val expectedW=maxOf(256,((if (monoPreview) width else width/2)*scale).toInt())
         val expectedH=maxOf(256,(height*scale).toInt())
         if(eyeBuffers[0].w!=expectedW || eyeBuffers[0].h!=expectedH) recreateEyes()
-        for(eye in 0..1) {
+        for(eye in 0..(if (monoPreview) 0 else 1)) {
             val e=eyeBuffers[eye]
             G.glBindFramebuffer(G.GL_FRAMEBUFFER,e.fbo)
             G.glViewport(0,0,e.w,e.h)
@@ -129,10 +131,10 @@ class StereoRenderer(
             }
             G.glClear(G.GL_COLOR_BUFFER_BIT or G.GL_DEPTH_BUFFER_BIT)
             val projection=FloatArray(16)
-            Matrix.perspectiveM(projection,0,82f,(width/2f)/height,0.04f,70f)
+            Matrix.perspectiveM(projection,0,82f,(if (monoPreview) width.toFloat() else width/2f)/height,0.04f,70f)
             val view=FloatArray(16)
             val forward=GazeMath.forward(head.yaw,head.pitch)
-            val eyeX=(if(eye==0) -1f else 1f)*workspace.ipdMeters*0.5f
+            val eyeX=if (monoPreview) 0f else (if(eye==0) -1f else 1f)*workspace.ipdMeters*0.5f
             Matrix.setLookAtM(view,0,eyeX,0f,0f,
                 eyeX+forward.x,forward.y,forward.z,0f,1f,0f)
             if(head.roll!=0f) Matrix.rotateM(view,0,-head.roll*180f/PI.toFloat(),0f,0f,1f)
@@ -152,10 +154,14 @@ class StereoRenderer(
         }
         G.glViewport(0,0,width,height)
         G.glClearColor(0f,0f,0f,1f);G.glClear(G.GL_COLOR_BUFFER_BIT)
-        for(eye in 0..1){
+        if (monoPreview) {
+            G.glViewport(0,0,width,height)
+            drawDistortedEye(eyeBuffers[0].texture,0f)
+            drawReticle(cursorX,cursorY,useHand,hit!=null)
+        } else for(eye in 0..1){
             G.glViewport(eye*(width/2),0,width/2,height)
             drawDistortedEye(eyeBuffers[eye].texture,workspace.distortion)
-            drawReticle(cursorX,cursorY,useHand,if(hit!=null) true else false)
+            drawReticle(cursorX,cursorY,useHand,hit!=null)
         }
         frameCount++
         if(start-lastFpsMark>1200){
@@ -226,7 +232,7 @@ class StereoRenderer(
             if(e.fbo!=0) G.glDeleteFramebuffers(1,intArrayOf(e.fbo),0)
             if(e.texture!=0) G.glDeleteTextures(1,intArrayOf(e.texture),0)
             if(e.depth!=0) G.glDeleteRenderbuffers(1,intArrayOf(e.depth),0)
-            e.w=maxOf(256,(width/2*workspace.renderScale).toInt())
+            e.w=maxOf(256,((if (monoPreview) width else width/2)*workspace.renderScale).toInt())
             e.h=maxOf(256,(height*workspace.renderScale).toInt())
             val tex=IntArray(1);G.glGenTextures(1,tex,0);e.texture=tex[0]
             G.glBindTexture(G.GL_TEXTURE_2D,e.texture)
